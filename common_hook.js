@@ -125,4 +125,16 @@ Java.perform(function () {
         return result;
     }
 
+    // Hooking java.io.OutputStream write method
+    Java.use("java.io.OutputStream").write.overload('[B').implementation = function (bArr) {
+        console.log("hooking java.io.OutputStream.write.overload('[B')");
+        let oriString = Java.use("java.lang.String").$new(bArr);
+        let hexString = byteArrayToHexString(bArr);
+        console.log("原始文本：" + oriString);    // 输出原始文本
+        console.log("压缩后hexString:" + hexString); // 输出压缩后的hexString
+        showStacks();
+
+        return this.write(bArr);
+    }
+
 })

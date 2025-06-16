@@ -9,13 +9,16 @@
 - Hook Collections类的sort方法
 - Hook Toast类的makeText方法
 - Hook Base64的encodeToString方法
+- Hook java.io.OutputStream的write方法
 
 #### [Json相关Hook脚本](hook_json.js)
 - Hook JsonObject类的put,toString方法
 - Hook Gson类的toJson方法
 - Hook fastjson2的JSON类的toJSONString方法
 
-#### [Hook ok3](hook_okhttp.js)
+#### [Hook ok3](hook_request.js)
+- Hook java.net.URL的openConnection方法，用于捕获url连接
+- Hook java.net.urlConnection的connect方法，用于捕获连接
 - Hook ok3的url方法，用于搜索指定url的请求
 - Hook ok3的header和addHeader方法，用于捕获添加header
 - Hook ok3post form的add方法用于捕获添加form参数
