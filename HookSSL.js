@@ -2,67 +2,9 @@ function showStacks() {
     console.log(Java.use("android.util.Log").getStackTraceString(Java.use("java.lang.Exception").$new()));
 }
 
-function myHook() {
-    function Uint8ArrayToString(fileData) {    //Uint8Array转字符串
-        var dataString = "";
-        for (var i = 0; i < fileData.length; i++) {
-            dataString += String.fromCharCode(fileData[i]);
-            // console.log(dataString)
-        }
-        return dataString
-    }
 
-    function byteToHexString(uint8arr) {  //byte数组转16进制字符串
-        if (!uint8arr) {
-            return '';
-        }
-        var hexStr = '';
-        for (var i = 0; i < uint8arr.length; i++) {
-            var hex = (uint8arr[i] & 0xff).toString(16);
-            hex = (hex.length === 1) ? '0' + hex : hex;
-            hexStr += hex;
-        }
-
-        return hexStr.toUpperCase();
-    }
-
+function hookSSL() {
     Java.perform(function () {
-        var BB = Java.use("java.security.MessageDigest");
-        BB.update.overload('[B').implementation = function (args1, args2, args3, args4, args5, args6) {
-            console.log(Uint8ArrayToString(args1))
-            var args = this.update(args1)
-            console.log("update", args)
-            return args
-        }
-        BB.digest.overload().implementation = function (args1, args2, args3, args4, args5, args6) {
-            var args = this.digest()
-            console.log(byteToHexString(args))
-            return args
-        }
-    });
-}
-
-function test() {
-    Java.perform(function () {
-        var StringCls = Java.use("java.lang.String")
-        var base64Cls = Java.use("android.util.Base64");
-        // base64Cls.encode.overload('[B', 'int', 'int', 'int').implementation = function(bArr, i, i2, i3) {
-        //     var ret = base64Cls.encode(bArr, i, i2, i3);
-        //     var str = StringCls.$new(ret);
-        //     if (str.indexOf("ABP") >= 0) {
-        //         console.log("base64: " + str);
-        //         showStacks();
-        //     }
-        //     return ret;
-        // }
-
-        // let zzcci = Java.use("com.google.android.gms.internal.ads.zzcci");
-        // zzcci["zzc"].implementation = function (str, str2, bundle) {
-        //     console.log('zzc is called' + ', ' + 'str: ' + str + ', ' + 'str2: ' + str2 + ', ' + 'bundle: ' + bundle);
-        //     this.zzc(str, str2, bundle);
-        // 	showStacks();
-        // };
-
         /*
         hook list:
         1.SSLcontext
@@ -415,10 +357,13 @@ function test() {
     });
 }
 
-function main() {
-    myHook();
-    test();
+// frida -Uf com.kwai.video  -l HookSSL.js
+// frida -Uf com.google.android.youtube  -l HookSSL.js
+// frida -UF com.google.android.youtube  -l HookSSL.js // 不重启app
+//objection -g com.kwai.video explore -s "android sslpinning disable"
+//objection -g com.google.android.youtube explore -s "android sslpinning disable" -P ~/.objection/plugins
+// function main() {
+//     hookSSL();
+// }
 
-}
-
-setImmediate(main);
+setImmediate(hookSSL);
