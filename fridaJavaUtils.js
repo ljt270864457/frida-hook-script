@@ -1,3 +1,97 @@
+// protobuf工具类
+function jbytesToJsArray(jbytes) {
+    var jsArray = [];
+    for (var i = 0; i < jbytes.length; i++) {
+        var b = jbytes[i];
+        if (b < 0) b += 256; // 转成无符号
+        jsArray.push(b);
+    }
+    return jsArray;
+}
+
+function decodeVarint(bytes, pos) {
+    var result = 0;
+    var shift = 0;
+    while (true) {
+        var b = bytes[pos++];
+        result |= (b & 0x7f) << shift;
+        if ((b & 0x80) === 0) break;
+        shift += 7;
+    }
+    return [result, pos];
+}
+
+function decodeField(bytes, pos) {
+    var [key, p] = decodeVarint(bytes, pos);
+    var fieldNum = key >>> 3;
+    var wireType = key & 0x07;
+
+    var val, newPos = p;
+    switch (wireType) {
+        case 0: // varint
+            [val, newPos] = decodeVarint(bytes, p);
+            break;
+        case 1: // 64-bit
+            val = 0;
+            for (var i = 0; i < 8; i++) {
+                val |= (bytes[p + i] & 0xff) << (8 * i);
+            }
+            newPos = p + 8;
+            break;
+        case 2: // length-delimited
+            var [len, p2] = decodeVarint(bytes, p);
+            var subBytes = bytes.slice(p2, p2 + len);
+            try {
+                // 尝试作为嵌套 message decode
+                val = decodeMessage(subBytes);
+            } catch (e) {
+                // 如果不是嵌套 message → 尝试解码为字符串
+                var rawStr = String.fromCharCode.apply(null, subBytes);
+                // 判断是否可打印
+                var printable = /^[\x20-\x7E]*$/.test(rawStr);
+                if (printable) {
+                    val = rawStr; // 直接保留原始字符串，不再转义
+                } else {
+                    // 输出 hex
+                    val = Array.from(subBytes)
+                        .map(x => ("0" + (x & 0xff).toString(16)).slice(-2))
+                        .join("");
+                }
+            }
+            newPos = p2 + len;
+            break;
+        case 5: // 32-bit
+            val = 0;
+            for (var i = 0; i < 4; i++) {
+                val |= (bytes[p + i] & 0xff) << (8 * i);
+            }
+            newPos = p + 4;
+            break;
+        default:
+            throw "Unsupported wireType " + wireType;
+    }
+
+    return [fieldNum, val, newPos];
+}
+
+function decodeMessage(jbytes) {
+    let bytes = jbytesToJsArray(jbytes);
+    var obj = {};
+    var pos = 0;
+    while (pos < bytes.length) {
+        var [fieldNum, val, newPos] = decodeField(bytes, pos);
+        if (obj[fieldNum]) {
+            if (!Array.isArray(obj[fieldNum])) obj[fieldNum] = [obj[fieldNum]];
+            obj[fieldNum].push(val);
+        } else {
+            obj[fieldNum] = val;
+        }
+        pos = newPos;
+    }
+    return obj;
+}
+
+
 (function () {
     // === 全局缓存，用于对象引用 ===
     var savedObjects = {};
@@ -73,7 +167,11 @@
                 if ((f.getModifiers() & 8) !== 0) { // static
                     f.setAccessible(true);
                     let val = null;
-                    try { val = f.get(null); } catch (e) { val = "[unreadable]"; }
+                    try {
+                        val = f.get(null);
+                    } catch (e) {
+                        val = "[unreadable]";
+                    }
                     console.log(`    static ${f.getType().getName()} ${f.getName()}; => ${prettyPrintValue(val)}`);
                 }
             }
@@ -135,7 +233,11 @@
                 if ((f.getModifiers() & 8) !== 0) { // static
                     f.setAccessible(true);
                     let val = null;
-                    try { val = f.get(null); } catch (e) { val = "[unreadable]"; }
+                    try {
+                        val = f.get(null);
+                    } catch (e) {
+                        val = "[unreadable]";
+                    }
                     console.log(`    static ${f.getType().getName()} ${f.getName()}; => ${prettyPrintValue(val)}`);
                 }
             }
@@ -147,7 +249,11 @@
                 if ((f.getModifiers() & 8) === 0) {
                     f.setAccessible(true);
                     let val = null;
-                    try { val = f.get(obj); } catch (e) { val = "[unreadable]"; }
+                    try {
+                        val = f.get(obj);
+                    } catch (e) {
+                        val = "[unreadable]";
+                    }
                     console.log(`    ${f.getType().getName()} ${f.getName()} => ${prettyPrintValue(val)}`);
                 }
             }
@@ -226,15 +332,15 @@
     // 导出到全局
     global.InspectJavaUtils = {
         dumpAny: dumpAny,
-        dumpClass: dumpClass,
-        dumpObject: dumpObject,
+        // dumpClass: dumpClass,
+        // dumpObject: dumpObject,
         prettyPrintValue: prettyPrintValue,
         getFieldValueByReflection: getFieldValueByReflection,
         bufferToByteArray: bufferToByteArray,
         savedObjects: savedObjects
     };
 
-    global.commonUtils = {
+    global.CommonUtils = {
         /**
          * 打印当前调用栈
          */
@@ -286,9 +392,52 @@
             return hexString;
         },
 
+        /**
+         * 字节数组转16进制字符串
+         * @param {byte[]} byteArray - 字节数组
+         * @returns {string} - hexdump
+         */
+        byteArrayToHexdump: function (byteArray) {
+            if (!byteArray) return "";
+
+            var out = "";
+            var length = byteArray.length;
+            for (var i = 0; i < length; i += 16) {
+                // 偏移量
+                var offset = ("00000000" + i.toString(16)).slice(-8);
+                out += offset + "  ";
+
+                // hex 部分
+                var hexPart = "";
+                var asciiPart = "";
+                for (var j = 0; j < 16; j++) {
+                    if (i + j < length) {
+                        var b = byteArray[i + j];
+                        if (b < 0) b += 256; // Java byte 转无符号
+                        var hex = ("0" + b.toString(16)).slice(-2);
+                        hexPart += hex + " ";
+                        // ASCII
+                        if (b >= 0x20 && b <= 0x7e) {
+                            asciiPart += String.fromCharCode(b);
+                        } else {
+                            asciiPart += ".";
+                        }
+                    } else {
+                        hexPart += "   "; // 补齐对齐
+                        asciiPart += " ";
+                    }
+                    if (j === 7) hexPart += " "; // 中间再空一格
+                }
+                out += hexPart + " |" + asciiPart + "|\n";
+            }
+            return out;
+        }
+
     };
 
-
+    global.ProtobufUtils = {
+        decodeMessage: decodeMessage
+    }
 })();
 
 // hookSSL 自动启用反抓包
