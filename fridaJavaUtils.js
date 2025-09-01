@@ -1,4 +1,7 @@
 // protobuf工具类
+
+
+
 function jbytesToJsArray(jbytes) {
     var jsArray = [];
     for (var i = 0; i < jbytes.length; i++) {
@@ -96,6 +99,8 @@ function decodeMessage(jbytes) {
     // === 全局缓存，用于对象引用 ===
     var savedObjects = {};
     var savedCounter = 1;
+    var gson;
+
 
     function saveObject(obj) {
         let id = savedCounter++;
@@ -310,6 +315,27 @@ function decodeMessage(jbytes) {
         }
     }
 
+    /**
+     * 打印gson对象
+     * @param obj
+     */
+    function dumpGsonObj(obj) {
+        try {
+            if (!gson) {
+                // 自己写的dex
+                Java.openClassFile("/data/local/tmp/com-ljt-gson.dex").load();
+                gson = Java.use('com.ljt.gson.Gson');
+            }
+            let clazz = obj.getClass();
+            console.log(`=======class ${clazz.getSimpleName()} (instance dump) =======\n`);
+            console.log(gson.$new().toJson(obj));
+        }
+        catch (e) {
+            console.log("dumpGsonObj error:", e);
+        }
+
+    }
+
     // 通过反射拿到字段的值
     function getFieldValueByReflection(obj, fieldName) {
         let cls = obj.getClass();
@@ -332,8 +358,7 @@ function decodeMessage(jbytes) {
     // 导出到全局
     global.InspectJavaUtils = {
         dumpAny: dumpAny,
-        // dumpClass: dumpClass,
-        // dumpObject: dumpObject,
+        dumpGsonObj: dumpGsonObj,
         prettyPrintValue: prettyPrintValue,
         getFieldValueByReflection: getFieldValueByReflection,
         bufferToByteArray: bufferToByteArray,
@@ -414,7 +439,7 @@ function decodeMessage(jbytes) {
                     if (i + j < length) {
                         var b = byteArray[i + j];
                         if (b < 0) b += 256; // Java byte 转无符号
-                        var hex = ("0" + b.toString(16)).slice(-2);
+                        var hex = ("0" + b.toString(16)).slice(-2).toUpperCase();
                         hexPart += hex + " ";
                         // ASCII
                         if (b >= 0x20 && b <= 0x7e) {
