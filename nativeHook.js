@@ -6,7 +6,7 @@ class NativeHook {
     }
 
     echoConfig(config, tag) {
-        console.log(`=======echo ${tag}==========`);
+        console.log(`=======echo ${tag},baseAddress:${this.baseAddress}==========`);
         Object.entries(config).forEach(([funcName, address]) => {
             console.log(`${funcName}: 0x${address.toString(16)}`);
         });
@@ -22,6 +22,10 @@ class NativeHook {
 
     get importConfig() {
         return this.#enumerateImportsFunc();
+    }
+
+    get symbolsConfig() {
+        return this.#enumerateSymbolsFunc();
     }
 
     #enumerateExportsFunc() {
@@ -40,6 +44,16 @@ class NativeHook {
             importConfig[imp.name] = imp.address.sub(this.baseAddress); // 改为存储偏移量
         });
         return importConfig; // 添加返回值
+    }
+    #enumerateSymbolsFunc() {
+        let symbols = Module.enumerateSymbols(this.libName);
+        console.log(`=======enumerateSymbols==========`);
+        console.log(symbols);
+        let symbolConfig = {}
+        symbols.forEach(sym => {
+            symbolConfig[sym.name] = sym.address.sub(this.baseAddress); // 改为存储偏移量
+        });
+        return symbolConfig; // 添加返回值
     }
 
     searchFunc(funcName) {
@@ -117,10 +131,17 @@ function main() {
 }
 
 // main()
-let hc = new NativeHook("libnativedemo.so");
-let exports = hc.exportsConfig;
-hc.echoConfig(exports,"export");
+//
+// let hc = new NativeHook("libnativedemo.so");
+// console.log(hc.baseAddress);
+// let exports = hc.exportsConfig;
+// // hc.echoConfig(exports,"export");
+// let imports = hc.importConfig;
+// // hc.echoConfig(imports,"imports");
+// let symbols = hc.symbolsConfig;
+// hc.echoConfig(symbols,"symbols");
 
 
 
-
+let baseAddr = Module.findBaseAddress("libnativedemo.so");
+let addAddr = Interceptor.attach(baseAddr.add(0x2664), {});
