@@ -1,8 +1,3 @@
-function showStacks() {
-    console.log(Java.use("android.util.Log").getStackTraceString(Java.use("java.lang.Exception").$new()));
-}
-
-
 function hookSSL() {
     Java.perform(function () {
         /*
@@ -27,7 +22,7 @@ function hookSSL() {
         var X509TrustManager = Java.use('javax.net.ssl.X509TrustManager');
         var HostnameVerifier = Java.use('javax.net.ssl.HostnameVerifier');
         var SSLContext = Java.use('javax.net.ssl.SSLContext');
-        var quiet_output = false;
+        var quiet_output = true;
 
         // // Helper method to honor the quiet flag.
 
@@ -354,10 +349,29 @@ function hookSSL() {
         } catch (err) {
             // console.log('[-] Cronet pinner not found')
         }
+
+        // 添加OkHttp 4.2+支持（Kotlin版本）
+        try {
+            var CertificatePinner = Java.use('okhttp3.CertificatePinner');
+            CertificatePinner['check$okhttp'].implementation = function (str, func) {
+                quiet_send('OkHttp 4.2+ check$okhttp called');
+            };
+        } catch(e) {}
+        // 添加OkHostnameVerifier完整Hook
+        try {
+            var OkHostnameVerifier = Java.use("okhttp3.internal.tls.OkHostnameVerifier");
+            OkHostnameVerifier.verify.overload('java.lang.String', 'javax.net.ssl.SSLSession').implementation = function() {
+                return true;
+            };
+        } catch(e) {}
+
+
     });
 }
 
 // frida -Uf com.kwai.video  -l HookSSL.js
+// frida -Uf com.rytong.hnair  -l HookSSL.js
+// frida -Uf com.mobileesports.bitcoinsplash  -l HookSSL.js
 // frida -Uf com.google.android.youtube  -l HookSSL.js
 // frida -UF com.google.android.youtube  -l HookSSL.js // 不重启app
 //objection -g com.kwai.video explore -s "android sslpinning disable"
