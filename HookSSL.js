@@ -356,14 +356,14 @@ function hookSSL() {
             CertificatePinner['check$okhttp'].implementation = function (str, func) {
                 quiet_send('OkHttp 4.2+ check$okhttp called');
             };
-        } catch(e) {}
+        } catch (e) { }
         // 添加OkHostnameVerifier完整Hook
         try {
             var OkHostnameVerifier = Java.use("okhttp3.internal.tls.OkHostnameVerifier");
-            OkHostnameVerifier.verify.overload('java.lang.String', 'javax.net.ssl.SSLSession').implementation = function() {
+            OkHostnameVerifier.verify.overload('java.lang.String', 'javax.net.ssl.SSLSession').implementation = function () {
                 return true;
             };
-        } catch(e) {}
+        } catch (e) { }
 
 
     });

@@ -343,6 +343,8 @@ function generateRandomHex(length) {
     /**
      * 打印gson对象
      * @param obj
+     * @param print
+     * @param request_id
      */
     function dumpGsonObj(obj, print = true, request_id = "") {
         try {
