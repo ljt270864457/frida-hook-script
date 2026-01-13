@@ -137,11 +137,23 @@ function generateRandomHex(length) {
         if (value === null) return "null";
 
         try {
-            let clazzName = value.$className || value.getClass().getName();
+            // 安全地获取类名
+            let clazzName = null;
+            if (value.$className) {
+                clazzName = value.$className;
+            } else if (value.getClass && typeof value.getClass === 'function') {
+                clazzName = value.getClass().getName();
+            } else {
+                return "[Error prettyPrintValue: cannot get class name]";
+            }
 
             // byte[]
             if (clazzName.startsWith('[B')) {
-                return `${byteArrayToUtf8(value)}`;
+                if (typeof CommonUtils !== 'undefined' && CommonUtils.byteArrayToUtf8) {
+                    return `${CommonUtils.byteArrayToUtf8(value)}`;
+                } else {
+                    return "[byte array - byteArrayToUtf8 not available]";
+                }
             }
 
             // 数组
@@ -154,31 +166,62 @@ function generateRandomHex(length) {
                 return "[" + arrVals.join(", ") + "]";
             }
 
-            // List
-            if (Java.use("java.util.List").class.isInstance(value)) {
-                let listSize = value.size();
+            // List - 尝试使用 Java.cast 安全地转换为 List
+            try {
+                let ListClass = Java.use("java.util.List");
+                // 尝试将对象转换为 List
+                let listObj = Java.cast(value, ListClass);
+                // 如果转换成功，调用 List 的方法
+                let listSize = listObj.size();
                 let listVals = [];
                 for (let i = 0; i < listSize; i++) {
-                    listVals.push(prettyPrintValue(value.get(i)));
+                    try {
+                        listVals.push(prettyPrintValue(listObj.get(i)));
+                    } catch (getError) {
+                        listVals.push("[get error: " + getError + "]");
+                    }
                 }
                 return "List(size=" + listSize + "): " + listVals.join(", ");
+            } catch (listError) {
+                // 如果 List 转换或处理失败，继续处理为普通对象
             }
 
-            // Map
-            if (Java.use("java.util.Map").class.isInstance(value)) {
-                let entrySet = value.entrySet().toArray();
+            // Map - 尝试使用 Java.cast 安全地转换为 Map
+            try {
+                let MapClass = Java.use("java.util.Map");
+                // 尝试将对象转换为 Map
+                let mapObj = Java.cast(value, MapClass);
+                // 如果转换成功，调用 Map 的方法
+                let entrySet = mapObj.entrySet().toArray();
                 let mapVals = [];
                 for (let i in entrySet) {
-                    let k = prettyPrintValue(entrySet[i].getKey());
-                    let v = prettyPrintValue(entrySet[i].getValue());
-                    mapVals.push(k + " => " + v);
+                    try {
+                        let k = prettyPrintValue(entrySet[i].getKey());
+                        let v = prettyPrintValue(entrySet[i].getValue());
+                        mapVals.push(k + " => " + v);
+                    } catch (entryError) {
+                        mapVals.push("[entry error: " + entryError + "]");
+                    }
                 }
                 return "Map(size=" + mapVals.length + "): {" + mapVals.join(", ") + "}";
+            } catch (mapError) {
+                // 如果 Map 转换或处理失败，继续处理为普通对象
             }
 
             // 普通 Java 对象
             let id = saveObject(value);
-            return `${clazzName}@${id}(${value.toString()})`;
+            // 安全地调用 toString
+            let toStringResult = "";
+            if (value.toString && typeof value.toString === 'function') {
+                try {
+                    toStringResult = value.toString();
+                } catch (e) {
+                    toStringResult = "[toString error: " + e + "]";
+                }
+            } else {
+                toStringResult = "[no toString method]";
+            }
+            return `${clazzName}@${id}(${toStringResult})`;
 
         } catch (e) {
             return "[Error prettyPrintValue: " + e + "]";
@@ -330,7 +373,53 @@ function generateRandomHex(length) {
                 let clazz = Java.use(target).class;
                 dumpClass(clazz);
             } else if (target.$className || (target.getClass && target.getClass())) {
-                // 实例
+                // 先检查是否是 List 或 Map，如果是则先 dump 其内容
+                try {
+                    // 检查是否是 List
+                    let ListClass = Java.use("java.util.List");
+                    let listObj = Java.cast(target, ListClass);
+                    let listSize = listObj.size();
+                    console.log(`======= List (size=${listSize}) =======`);
+                    for (let i = 0; i < listSize; i++) {
+                        try {
+                            let element = listObj.get(i);
+                            console.log(`--- List[${i}] ---`);
+                            dumpAny(element);
+                        } catch (getError) {
+                            console.log(`[Error getting List[${i}]: ${getError}]`);
+                        }
+                    }
+                    return; // List 已处理，直接返回
+                } catch (listError) {
+                    // 不是 List，继续检查 Map
+                }
+
+                try {
+                    // 检查是否是 Map
+                    let MapClass = Java.use("java.util.Map");
+                    let mapObj = Java.cast(target, MapClass);
+                    let mapSize = mapObj.size();
+                    console.log(`======= Map (size=${mapSize}) =======`);
+                    let entrySet = mapObj.entrySet().toArray();
+                    for (let i = 0; i < entrySet.length; i++) {
+                        try {
+                            let entry = entrySet[i];
+                            let key = entry.getKey();
+                            let value = entry.getValue();
+                            console.log(`--- Map entry[${i}] key ---`);
+                            dumpAny(key);
+                            console.log(`--- Map entry[${i}] value ---`);
+                            dumpAny(value);
+                        } catch (entryError) {
+                            console.log(`[Error getting Map entry[${i}]: ${entryError}]`);
+                        }
+                    }
+                    return; // Map 已处理，直接返回
+                } catch (mapError) {
+                    // 不是 Map，继续处理为普通对象
+                }
+
+                // 普通实例对象
                 dumpObject(target);
             } else {
                 logWithTimestamp("Unsupported target:", target);
@@ -366,6 +455,26 @@ function generateRandomHex(length) {
         }
     }
 
+    function dumpSentinelRTObj(obj, max_depth = 5, pretty = false, request_id = "") {
+        try {
+            if (!sentinelrt) {
+                // 自己写的dex
+                Java.openClassFile("/data/local/tmp/sentinelrt.dex").load();
+                sentinelrt = Java.use('rt.sentinel.SentinelRT');
+            }
+            let clazz = obj.getClass();
+            let dumpResult = sentinelrt.toJson(obj, max_depth, pretty)
+            logWithTimestamp(`=======class ${clazz.getSimpleName()} (instance dump),uuid:${request_id} =======\n`);
+            if (print) {
+                logWithTimestamp(dumpResult);
+            }
+            return dumpResult;
+        } catch (e) {
+            logWithTimestamp(`dumpSentinelRTObj error:${e},uuid:${request_id}`);
+            return '';
+        }
+    }
+
 
     // 通过反射拿到字段的值
     function getFieldValueByReflection(obj, fieldName) {
@@ -390,6 +499,7 @@ function generateRandomHex(length) {
     global.InspectJavaUtils = {
         dumpAny: dumpAny,
         dumpGsonObj: dumpGsonObj,
+        dumpSentinelRTObj:dumpSentinelRTObj,
         prettyPrintValue: prettyPrintValue,
         getFieldValueByReflection: getFieldValueByReflection,
         bufferToByteArray: bufferToByteArray,

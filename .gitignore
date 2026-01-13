@@ -3,3 +3,8 @@
 
 # local storage
 .DS_Store
+
+# project dir
+youtube/
+kwai/
+uc/
